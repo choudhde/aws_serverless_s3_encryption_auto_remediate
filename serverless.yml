@@ -1,0 +1,65 @@
+# Name of our service
+service: s3-bucket-encryption
+
+# The required version of serverless we have to be using for this to work
+frameworkVersion: ">=2.0.0"
+
+#####################################################
+# Our service provider and runtime/region definitions
+#####################################################
+provider:
+  name: aws                       # Which provider to use
+  stage: ${opt:stage, 'dev'}      # Which stage to deploy to
+  runtime: python3.8              # Which Lambda runtime to use
+  logRetentionInDays: 30          # How many days we want to maintain logs in CloudWatch
+  region: 'ca-central-1'          # Which AWS region to deploy in, ca-central-1 by default, but overridable
+  memorySize: 128                 # In megabytes, 128 minimum in 64MB increments
+  timeout: 300                    # In seconds
+  versionFunctions:  true         # We want to version our functions so we can revert if we need to
+  environment:
+    TOPIC_NAME: "check_s3_bucket_encryption"
+    SNS_SUBJECT: "S3 Bucket Non-Compliant: No Server Side Encryption Found"
+    SNS_MESSAGE: "Warning: No Encryption Found on S3 Bucket:"
+    SNS_SUBSCRIBER: "test@email.com"
+  iamRoleStatements:
+  - Effect: Allow
+    Action:
+      - s3:*
+      - sns:*
+      - config:*
+      - events:*
+    Resource: "*"
+
+
+##############################
+# Our function definition
+##############################
+functions:
+  s3bucketencryption:
+    description: Detects S3 buckets without any encryption, sends out a notification and encrypts the buckets with AES:256
+    handler: s3bucket_encryption.lambda_handler
+    events:
+      - cloudwatchEvent:
+          description: Creates Event Rule and triggers function based on events
+          event:
+           source:
+             - "aws.s3"
+           detail-type:
+             - "AWS API Call via CloudTrail"
+           detail:
+             eventSource:
+               - "s3.amazonaws.com"
+             eventName:
+               - CreateBucket
+               - DeleteBucketEncryption
+
+##############################
+package:
+  patterns:
+    - "!.DS_Store"
+    - "!.git/**"
+    - "!.gitignore"
+    - "!.serverless/**"
+    - "!requirements.txt"
+    - "!**.md"
+    - "!.png"
